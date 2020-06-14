@@ -1,0 +1,71 @@
+Część 1 – Wycieczki górskie
+Zaimportuj dane uruchamiając skrypt task2.cypher. Napisz następujące zapytania:
+1.	Znajdź trasy którymi można dostać się z Darjeeling na Sandakphu, mające najmniejszą ilość etapów
+MATCH path = ShortestPath((start:town{name:'Darjeeling'})-[*]-(end:peak{name:'Sandakphu'})) RETURN path
+2.	Znajdź mające najmniej etapów trasy którymi można dostać się z Darjeeling na Sandakphu i które mogą być wykorzystywane zimą
+MATCH paths = allShortestPaths((start:town{ name: 'Darjeeling' })-[*]-(end:peak{ name: 'Sandakphu' }))
+WHERE ALL (p IN relationships(paths) WHERE p.winter = "true")
+RETURN paths
+3.	Uszereguj trasy którymi można dostać się z Darjeeling na Sandakphu według dystansu.
+MATCH p=(start:town{ name: 'Darjeeling' })-[*]->(end:peak{ name: 'Sandakphu' })
+WITH p, REDUCE(w=0,x IN relationships(p) | w+x.distance) AS distance
+RETURN p, distance ORDER BY distance
+
+3.1. Znajdź wszystkie miejsca do których można dotrzeć przy pomocy roweru (twowheeler) z Darjeeling latem
+MATCH p=(start:town{ name: 'Darjeeling' })-[:twowheeler*{summer:"true"}]->(end) RETURN end
+(Brak wyników. Z Darjeeling nie da się wyjechać rowerem.)
+
+Część 2 – Połączenia lotnicze
+
+Przed rozpoczęciem drugiej części ułatwiłem sobie pracę wykonując następujące polecenia:
+
+MATCH (f:Flight)<-[a:ASSIGN]-(t:Ticket{class:"business"})
+SET f.businessPrice = t.price
+RETURN f
+MATCH (f:Flight)<-[a:ASSIGN]-(t:Ticket{class:"economy"})
+SET f.economyPrice = t.price
+RETURN f
+MATCH (f:Flight)<-[a:ASSIGN]-(t:Ticket{class:"firstClass"})
+SET f.firstClassPrice = t.price
+RETURN f
+MATCH (a1:Airport)<-[o:ORIGIN]-(f:Flight)-[d:DESTINATION]->(a2:Airport)
+UNWIND [f.economyPrice,f.businessPrice,f.firstClassPrice] as prices
+WITH a1,f,a2,min(prices) as minPrice
+CREATE (a1)-[r:ROUTE{flight:id(f),minPrice:minPrice,airline:f.airline,businessPrice:f.businessPrice,economyPrice:f.economyPrice,firstClassPrice:f.firstClassPrice,date:f.date,distance:f.distance,duration:f.duration}]->(a2)
+return a1,r,a2
+
+
+4.	Uszereguj porty lotnicze według ilości rozpoczynających się w nich lotów
+MATCH (:Flight)-[r:ORIGIN]->(airport:Airport)
+RETURN airport,count(r) as amountOfDepartures
+ORDER BY amountOfDepartures
+5.	Znajdź wszystkie porty lotnicze, do których da się dolecieć (bezpośrednio lub z przesiadkami) z Los Angeles (LAX) wydając mniej niż 3000
+MATCH (a1:Airport{name:"LAX"})-[r:ROUTE*]->(a2:Airport)
+WHERE reduce(price=0,x IN r|price+x.minPrice)<3000
+RETURN a1,r,a2
+6.	Uszereguj połączenia, którymi można dotrzeć z Los Angeles (LAX) do Dayton (DAY) według ceny biletów
+MATCH path= allShortestPaths((start:Airport{ name: 'LAX' })-[r:ROUTE*]->(end:Airport{ name: 'DAY' }))
+RETURN path, reduce(price=0, route in r|price+route.minPrice) as pathPrice
+ORDER BY pathPrice
+(Brak wyników.)
+7.	Znajdź najtańsze połączenie z Los Angeles (LAX) do Dayton (DAY)
+MATCH path= allShortestPaths((start:Airport{ name: 'LAX' })-[r:ROUTE*]->(end:Airport{ name: 'DAY' }))
+RETURN path, reduce(price=0, route in r|price+route.minPrice) as pathPrice
+ORDER BY pathPrice
+LIMIT 1
+(Brak wyników.)
+8.	Znajdź najtańsze połączenie z Los Angeles (LAX) do Dayton (DAY) w klasie biznes
+MATCH path= allShortestPaths((start:Airport{ name: 'LAX' })-[r:ROUTE*]->(end:Airport{ name: 'DAY' }))
+RETURN path, reduce(price=0, minPrice in [flight IN r | flight.businessPrice]|price+minPrice) as pathPrice
+ORDER BY pathPrice
+LIMIT 1
+(Brak wyników.)
+9.	Uszereguj linie lotnicze według ilości miast, pomiędzy którymi oferują połączenia (unikalnych miast biorących udział w relacjach :ORIGIN i :DESTINATION węzłów typu Flight obsługiwanych przez daną linię)
+MATCH (a1:Airport)<-[:ORIGIN]-(f:Flight)-[:DESTINATION]->(a2:Airport)
+UNWIND [a2, a1] as cities
+RETURN f.airline as airline,count(distinct cities) as numberOfUniqueCities
+10.	Znajdź najtańszą trasę łączącą 3 różne porty lotnicze
+MATCH (a1:Airport)-[r1:ROUTE]->(a2:Airport)-[r2:ROUTE]->(a3:Airport) WHERE NOT a1=a3
+RETURN a1 as firstCity,r1 as firstFlight,a2 as secondCity,r2 as secondFlight,a3 as thirdCity,r1.minPrice+r2.minPrice as price
+ORDER BY price
+LIMIT 1
